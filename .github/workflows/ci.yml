@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --check .
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+
+  api-check:
+    # The manual ships with PICO-8, which is paid software and cannot be
+    # installed in CI. Run the checker against a fixture of the signature lines
+    # instead -- enough to catch a stub drifting out of sync.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4"
+
+      - name: check API coverage against fixture
+        run: lua scripts/check-api.lua test/fixtures/manual-signatures.txt
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        nvim: ["v0.10.4", "v0.11.3", "stable", "nightly"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.nvim }}
+
+      - name: plugin loads and commands register
+        run: |
+          nvim --clean -u test/minimal_init.lua --headless \
+            '+lua assert(require("pico8.config").options.pico8_cmd == "pico8", "setup failed")' \
+            '+lua local c = vim.api.nvim_get_commands({})
+                  for _, name in ipairs({"Pico8Run", "Pico8Stop", "Pico8New", "Pico8Info"}) do
+                    assert(c[name], name .. " not registered")
+                  end' \
+            '+lua assert(vim.uv.fs_stat(require("pico8.util").types_dir() .. "/pico8.lua"), "types missing")' \
+            +qa
+
+      - name: filetype and folding
+        run: |
+          printf 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\nfunction _draw() cls(1) end\n__gfx__\n00000000\n' > /tmp/t.p8
+          nvim --clean -u test/minimal_init.lua --headless /tmp/t.p8 \
+            '+lua assert(vim.bo.filetype == "p8", "filetype is " .. vim.bo.filetype)' \
+            '+lua assert(vim.bo.shiftwidth == 1, "shiftwidth not applied")' \
+            '+lua assert(vim.fn.foldlevel(5) == 1, "no fold at __gfx__")' \
+            +qa
+
+      - name: additive lua_ls merge preserves user settings
+        run: |
+          nvim --clean -u test/minimal_init.lua --headless \
+            '+lua local m = require("pico8.lsp").extend_lua_ls({ settings = { Lua = {
+                    workspace = { library = { "/mine" } },
+                    runtime = { nonstandardSymbol = { "??" } },
+                    diagnostics = { globals = { "MY_GLOBAL" } } } } })
+                  local L = m.settings.Lua
+                  assert(vim.tbl_contains(L.workspace.library, "/mine"), "dropped user library")
+                  assert(vim.tbl_contains(L.runtime.nonstandardSymbol, "??"), "dropped user symbol")
+                  assert(vim.tbl_contains(L.runtime.nonstandardSymbol, "+="), "missing our symbol")
+                  assert(vim.tbl_contains(L.diagnostics.globals, "MY_GLOBAL"), "dropped user global")' \
+            +qa
+
+      - name: scaffolding
+        run: |
+          nvim --clean -u test/minimal_init.lua --headless \
+            '+lua local cart = require("pico8.cart").new("citest")
+                  assert(cart, "scaffold returned nil")
+                  assert(vim.uv.fs_stat(cart), "cart not written")
+                  local dir = vim.fn.fnamemodify(cart, ":h")
+                  assert(vim.uv.fs_stat(dir .. "/main.lua"), "include file not written")
+                  local u, f = require("pico8.util").cart_uses_include(cart)
+                  assert(u and f == "main.lua", "include not detected")
+                  assert(require("pico8.cart").new("citest") == nil, "overwrote existing cart")' \
+            +qa
+
+      - name: checkhealth runs without error
+        run: |
+          nvim --clean -u test/minimal_init.lua --headless \
+            '+checkhealth pico8' \
+            '+lua local out = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+                  assert(out:match("pico8.nvim"), "health output missing")
+                  assert(not out:match("bundled definitions missing"), "types not found by health")' \
+            +qa

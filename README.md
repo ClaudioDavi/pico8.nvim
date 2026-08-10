@@ -184,6 +184,32 @@ Run `:checkhealth pico8` first — it reports missing binaries, the resolved def
 
 **Highlighting looks wrong at the bottom of a cart.** Expected. There is no treesitter grammar for the `.p8` container, so Lua's is reused and the hex data sections confuse it. They are data, not code — fold them with `<leader>pf`.
 
+## Verifying the API definitions
+
+`types/pico8.lua` is transcribed by hand, so there is a script to check it against the manual PICO-8 ships:
+
+```sh
+lua scripts/check-api.lua                      # finds the manual automatically
+lua scripts/check-api.lua /path/to/manual.txt   # or point at it
+lua scripts/check-api.lua --list                # print the parsed API
+```
+
+It parses the signature lines out of `pico-8_manual.txt` and reports three kinds of drift:
+
+- **MISSING** — documented in the manual, no stub here
+- **UNKNOWN** — a stub with no manual entry (a typo, or an invention)
+- **MISMATCHED** — arity or optionality differs from the documented signature
+
+Exit status is 0 when everything matches, so it works as a pre-commit hook.
+
+A handful of signatures are exempt, listed in `KNOWN_DIFFS` at the top of the script with a reason each — the manual documents `pal` and `print` in two forms, has a couple of typos of its own (`SSPR` has an unbalanced bracket, `RELOAD` a missing comma), and marks several parameters required that PICO-8 actually accepts as absent. Those last were confirmed by running `pico8 -x` rather than taken on trust.
+
+CI runs the same check against `test/fixtures/manual-signatures.txt`, since the manual ships only with PICO-8 and cannot be installed on a runner. Refresh the fixture after a PICO-8 upgrade:
+
+```sh
+scripts/make-fixture.sh
+```
+
 ## Credits
 
 - PICO-8 by [Lexaloffle](https://www.lexaloffle.com/) — the API definitions were transcribed from the manual shipped with v0.2.7.

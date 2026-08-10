@@ -323,6 +323,47 @@ function all(tbl) end
 ---@param func fun(v: T)
 function foreach(tbl, func) end
 
+--- Iterate over all key/value pairs in a table.
+---@param tbl table
+---@return fun(): any, any
+function pairs(tbl) end
+
+--#endregion
+
+--#region Metatables and raw access
+
+---@param tbl table
+---@param m table|nil
+---@return table tbl
+function setmetatable(tbl, m) end
+
+---@param tbl table
+---@return table|nil
+function getmetatable(tbl) end
+
+--- Set a key without invoking the __newindex metamethod.
+---@param tbl table
+---@param key any
+---@param value any
+function rawset(tbl, key, value) end
+
+--- Read a key without invoking the __index metamethod.
+---@param tbl table
+---@param key any
+---@return any
+function rawget(tbl, key) end
+
+--- Compare without invoking the __eq metamethod.
+---@param tbl1 any
+---@param tbl2 any
+---@return boolean
+function rawequal(tbl1, tbl2) end
+
+--- Length without invoking the __len metamethod.
+---@param tbl table|string
+---@return integer
+function rawlen(tbl) end
+
 --#endregion
 
 --#region Math
