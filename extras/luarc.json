@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime": {
+    "version": "Lua 5.4",
+    "nonstandardSymbol": ["+=", "-=", "*=", "/=", "\\=", "%=", "^=", "..=", "|=", "&=", "^^=", "<<=", ">>=", ">>>=", "!=", "//"]
+  },
+  "workspace": {
+    "library": ["/ABSOLUTE/PATH/TO/nvim-pico8/types"],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "disable": ["lowercase-global"],
+    "globals": ["_init", "_update", "_update60", "_draw"]
+  },
+  "completion": {
+    "callSnippet": "Replace",
+    "keywordSnippet": "Replace"
+  }
+}

@@ -1,0 +1,198 @@
+*pico8.txt*  Write PICO-8 carts in Neovim
+
+==============================================================================
+CONTENTS                                                       *pico8-contents*
+
+    1. Introduction ......................... |pico8-introduction|
+    2. Requirements ......................... |pico8-requirements|
+    3. Setup ................................ |pico8-setup|
+    4. Commands ............................. |pico8-commands|
+    5. Mappings ............................. |pico8-mappings|
+    6. Configuration ........................ |pico8-configuration|
+    7. The #include workflow ................ |pico8-include|
+    8. Standalone use ....................... |pico8-standalone|
+    9. Troubleshooting ...................... |pico8-troubleshooting|
+
+==============================================================================
+1. INTRODUCTION                                            *pico8-introduction*
+
+PICO-8 carts are plain-text containers: a header, the Lua code, then sprite,
+map and sound data as hex. Pointing lua_ls at one produces a wall of false
+warnings, because every API function looks like an undefined global and
+PICO-8's compound operators are not standard Lua.
+
+This plugin supplies API definitions, corrects the diagnostics, adds filetype
+and folding support for the cart format, and provides commands to run and
+scaffold carts.
+
+It makes no assumptions about your plugin manager or distribution.
+
+==============================================================================
+2. REQUIREMENTS                                            *pico8-requirements*
+
+    - Neovim 0.10+ (0.11+ recommended)
+    - PICO-8            https://www.lexaloffle.com/pico-8.php
+    - lua-language-server, for completion and hover
+    - pico8-ls, optional, for diagnostics inside .p8 files
+
+Run |:checkhealth| pico8 to see what was detected.
+
+==============================================================================
+3. SETUP                                                          *pico8-setup*
+
+>lua
+    require("pico8").setup {
+      carts_dir = "~/pico8",
+    }
+<
+setup() must be called. This plugin contributes settings to lua_ls but does
+not start it -- enable lua_ls as you normally would, e.g. >lua
+    vim.lsp.enable "lua_ls"
+<
+The settings are merged additively, so a distribution that already configures
+lua_ls needs no changes.
+
+==============================================================================
+4. COMMANDS                                                    *pico8-commands*
+
+                                                                    *:Pico8Run*
+:Pico8Run [{cart}]
+        Write the current buffer, then launch PICO-8 on {cart}. With no
+        argument, finds the cart for the current buffer: a .p8 buffer is its
+        own cart, otherwise walks up from the file looking for a sibling .p8.
+        If a directory contains several, prompts for which.
+
+        PICO-8 is started detached, so it outlives Neovim.
+
+                                                                   *:Pico8Stop*
+:Pico8Stop
+        Terminate the PICO-8 process started by |:Pico8Run|. Has no effect on
+        a PICO-8 started outside Neovim.
+
+                                                                    *:Pico8New*
+:Pico8New [{name}]
+        Scaffold `carts_dir`/{name}/ containing {name}.p8 and main.lua, then
+        open main.lua. Prompts for a name if omitted. Never overwrites: an
+        existing cart aborts, and an existing main.lua is left untouched.
+
+                                                                   *:Pico8Info*
+:Pico8Info
+        Print resolved paths and whether the pico8 binary was found.
+
+==============================================================================
+5. MAPPINGS                                                    *pico8-mappings*
+
+Defaults, all configurable via the `keymaps` table:
+
+    <leader>pr      |:Pico8Run|
+    <leader>ps      |:Pico8Stop|
+    <leader>pf      Toggle folding of the cart data sections
+
+Set an entry to `false` to skip defining it.
+
+Note: inside the PICO-8 window, CTRL-R reloads the cart from disk. That is
+usually a faster loop than relaunching.
+
+==============================================================================
+6. CONFIGURATION                                          *pico8-configuration*
+
+Defaults: >lua
+    {
+      pico8_cmd = "pico8",
+      run_args = { "-run" },
+      carts_dir = "~/pico8",
+      include_file = "main.lua",
+      cart_version = 42,
+
+      lsp = {
+        enable = true,
+        pico8_ls = true,
+        tune_diagnostics = true,
+      },
+
+      folding = {
+        enable = true,
+        start_closed = true,
+      },
+
+      keymaps = {
+        run = "<leader>pr",
+        stop = "<leader>ps",
+        new = false,
+        toggle_folds = "<leader>pf",
+      },
+    }
+<
+                                                    *pico8-tune_diagnostics*
+`lsp.tune_diagnostics` disables the `lowercase-global` rule and declares the
+PICO-8 callbacks as globals. PICO-8 code is global by design: `local` costs
+tokens against the 8192-token budget, and _init/_update/_draw must be global
+for PICO-8 to find them.
+
+Genuine problems are still reported. A misspelled API call is an undefined
+global, and passing a string where a coordinate belongs is a type mismatch.
+
+==============================================================================
+7. THE #INCLUDE WORKFLOW                                        *pico8-include*
+
+|:Pico8New| lays a project out so the code can be edited as plain Lua: >
+    ~/pico8/pong/
+    ├── pong.p8      six lines: header, #include, one blank sprite row
+    └── main.lua     your code
+<
+PICO-8 resolves `#include` when it loads the cart, so CTRL-R inside PICO-8
+picks up edits to main.lua.
+
+Three things to know:
+
+    - Include paths are relative to the cart. Keep main.lua beside the .p8.
+    - Multiple includes are concatenated into one scope. There are no modules
+      and no `require`; a function in player.lua is globally visible. Order
+      matters only for top-level code that runs immediately.
+    - Do not edit code in PICO-8's built-in editor. Its code tab shows the
+      literal `#include main.lua` line. Typing over it and saving replaces the
+      include with expanded code, silently breaking the link. Sprites, map and
+      sound are always safe to edit there.
+
+Splitting files does not save tokens: the 8192-token limit counts every
+include.
+
+==============================================================================
+8. STANDALONE USE                                            *pico8-standalone*
+
+The API definitions are an annotated Lua file, usable by any lua_ls client
+without this plugin -- VS Code, Zed, Helix, or plain Neovim.
+
+Copy extras/luarc.json to the root of your carts directory as `.luarc.json`
+and point `workspace.library` at this repository's types/ directory.
+
+One .luarc.json at the root covers every cart beneath it, because lua_ls walks
+up from the file to find it. Note that `.git` is also a root marker: if you
+git-init an individual game, put a copy of .luarc.json inside it too, or the
+closer marker wins and the settings are lost.
+
+==============================================================================
+9. TROUBLESHOOTING                                      *pico8-troubleshooting*
+
+Run |:checkhealth| pico8 first.
+
+Still seeing "Undefined global `cls`":
+        lua_ls reads configuration at startup -- restart Neovim. Then check
+        |:Pico8Info| reports a types dir that exists, and that lua_ls is
+        attached.
+
+A project .luarc.json overrides this plugin:
+        When a .luarc.json exists at the project root, lua_ls uses it instead
+        of settings sent by the client. Delete it, or add the types/ path to
+        its `workspace.library`.
+
+|:Pico8Run| reports no cart found:
+        It searches for a *.p8 beside the current file and upward. An unsaved,
+        unnamed buffer has no path to search from.
+
+Highlighting breaks at the bottom of a cart:
+        Expected. No treesitter grammar exists for the .p8 container, so Lua's
+        is reused, and the hex data sections confuse it. Fold them away with
+        <leader>pf.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
