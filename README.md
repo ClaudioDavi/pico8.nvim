@@ -32,7 +32,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  "your-name/pico8.nvim",
+  "claudiodavi/pico8.nvim",
   ft = { "p8", "lua" },
   opts = {
     carts_dir = "~/pico8",
@@ -44,7 +44,7 @@ With [packer.nvim](https://github.com/wbthomason/packer.nvim):
 
 ```lua
 use {
-  "your-name/pico8.nvim",
+  "claudiodavi/pico8.nvim",
   config = function()
     require("pico8").setup()
   end,
@@ -54,7 +54,7 @@ use {
 With `vim.pack` (Neovim 0.12+):
 
 ```lua
-vim.pack.add { "https://github.com/your-name/pico8.nvim" }
+vim.pack.add { "https://github.com/claudiodavi/pico8.nvim" }
 require("pico8").setup()
 ```
 
