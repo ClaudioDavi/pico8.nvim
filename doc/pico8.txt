@@ -62,12 +62,30 @@ lua_ls needs no changes.
         own cart, otherwise walks up from the file looking for a sibling .p8.
         If a directory contains several, prompts for which.
 
-        PICO-8 is started detached, so it outlives Neovim.
+        With `terminal.enable` (the default) PICO-8 runs in a terminal
+        buffer opened in a split, so printh() output and PICO-8's stdout are
+        visible and the window is just another window to jump to. The process
+        is owned by Neovim and dies with it.
+
+        With `terminal.enable = false` PICO-8 is started detached instead: it
+        outlives Neovim, but its output is discarded.
 
                                                                    *:Pico8Stop*
 :Pico8Stop
         Terminate the PICO-8 process started by |:Pico8Run|. Has no effect on
-        a PICO-8 started outside Neovim.
+        a PICO-8 started outside Neovim. The terminal buffer is kept, so the
+        output can still be read.
+
+                                                                   *:Pico8Term*
+:Pico8Term
+        Show or hide the run terminal. Does not touch the process: hiding the
+        window leaves PICO-8 running.
+
+                                                              *:Pico8TermClear*
+:Pico8TermClear
+        Discard the terminal's accumulated output without touching PICO-8.
+        Trims 'scrollback'; the terminal's live screen is not scrollback and
+        stays, so a few lines remain.
 
                                                                     *:Pico8New*
 :Pico8New [{name}]
@@ -86,6 +104,7 @@ Defaults, all configurable via the `keymaps` table:
 
     <leader>pr      |:Pico8Run|
     <leader>ps      |:Pico8Stop|
+    <leader>pt      |:Pico8Term|
     <leader>pf      Toggle folding of the cart data sections
 
 Set an entry to `false` to skip defining it.
@@ -104,6 +123,13 @@ Defaults: >lua
       include_file = "main.lua",
       cart_version = 42,
 
+      terminal = {
+        enable = true,
+        split = "botright 15split",
+        focus = false,
+        close_on_exit = false,
+      },
+
       lsp = {
         enable = true,
         pico8_ls = true,
@@ -118,11 +144,24 @@ Defaults: >lua
       keymaps = {
         run = "<leader>pr",
         stop = "<leader>ps",
+        terminal = "<leader>pt",
         new = false,
         toggle_folds = "<leader>pf",
       },
     }
 <
+                                                          *pico8-terminal*
+`terminal.enable` runs PICO-8 as a job in a terminal buffer. This is how you
+debug a cart from the editor: printh("hello") writes to stdout, which is that
+buffer. `split` is the command used to open its window -- "vsplit",
+"botright 20split", "tabnew", anything that creates a window. `focus` decides
+whether the cursor moves there on launch; either way the window is reachable
+with the usual window commands, and |:Pico8Term| toggles it.
+
+Because the job belongs to Neovim, quitting Neovim quits PICO-8, and |:quit|
+asks about the running job. Set `terminal.enable = false` for the old detached
+behaviour.
+
                                                     *pico8-tune_diagnostics*
 `lsp.tune_diagnostics` disables the `lowercase-global` rule and declares the
 PICO-8 callbacks as globals. PICO-8 code is global by design: `local` costs
