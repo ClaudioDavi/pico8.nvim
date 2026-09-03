@@ -19,6 +19,10 @@ function M.setup()
     require("pico8.run").stop()
   end, "pico8: stop cart")
 
+  set(maps.terminal, function()
+    require("pico8.run").toggle_terminal()
+  end, "pico8: toggle run terminal")
+
   set(maps.new, function()
     vim.cmd "Pico8New"
   end, "pico8: new cart")

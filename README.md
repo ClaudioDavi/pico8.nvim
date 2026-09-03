@@ -16,7 +16,7 @@ Works with any Neovim setup — no plugin-manager or distribution assumptions. E
 - **Correct diagnostics** — PICO-8's `+=`, `!=`, `\=` and friends are accepted; `lowercase-global` is off because PICO-8 code is global by design. Genuine mistakes (typos, wrong argument types) are still reported.
 - **Filetype support** — `.p8` gets its own filetype, borrows Lua's treesitter grammar for highlighting, and uses PICO-8's indentation conventions.
 - **Folding** for the `__gfx__` / `__map__` / `__sfx__` data sections, so a cart reads as code.
-- **Run the cart** from the editor with one keypress, from either the cart or the Lua file it includes.
+- **Run the cart** from the editor with one keypress, from either the cart or the Lua file it includes — in a terminal split, so `printh` output is right there for debugging.
 - **Scaffolding** — `:Pico8New pong` creates a project laid out for editing outside PICO-8.
 
 ## Requirements
@@ -76,9 +76,13 @@ If your distribution already sets up `lua_ls` (LazyVim, NvChad, kickstart, …),
 |---|---|---|
 | `:Pico8Run [cart]` | `<leader>pr` | Save, then run the cart in PICO-8 |
 | `:Pico8Stop` | `<leader>ps` | Terminate the PICO-8 process nvim started |
+| `:Pico8Term` | `<leader>pt` | Show or hide the run terminal (leaves PICO-8 running) |
+| `:Pico8TermClear` | — | Discard the terminal's output, leaving PICO-8 running |
 | `:Pico8New [name]` | — | Scaffold a new cart project and open its Lua file |
 | `:Pico8Info` | — | Print resolved paths and detected tools |
 | — | `<leader>pf` | Toggle folding of the cart data sections |
+
+PICO-8 runs in a terminal buffer inside Neovim, opened in a split below. That is where `printh("x")` output and PICO-8's own stdout land, so you can debug a cart without leaving the editor — it is an ordinary window, reachable with `<C-w>j` and toggleable with `<leader>pt`. The process belongs to Neovim, so quitting Neovim quits PICO-8; pass `terminal = { enable = false }` to go back to a detached process that outlives the editor (with no visible output).
 
 `:Pico8Run` works from the `.p8` **or** from the Lua file it includes — it walks up from the current file to find a sibling cart. If a directory holds several carts you are asked which one.
 
@@ -96,6 +100,13 @@ require("pico8").setup {
   include_file = "main.lua",    -- the file new carts #include
   cart_version = 42,            -- `version` header for new carts
 
+  terminal = {
+    enable = true,              -- run PICO-8 in a terminal buffer in nvim
+    split = "botright 15split", -- command that opens its window
+    focus = false,              -- move the cursor there on launch
+    close_on_exit = false,      -- keep the output after PICO-8 quits
+  },
+
   lsp = {
     enable = true,              -- contribute settings to lua_ls
     pico8_ls = true,            -- attach pico8-ls to .p8 if installed
@@ -110,6 +121,7 @@ require("pico8").setup {
   keymaps = {
     run = "<leader>pr",
     stop = "<leader>ps",
+    terminal = "<leader>pt",
     new = false,                -- false disables a mapping
     toggle_folds = "<leader>pf",
   },

@@ -13,6 +13,14 @@ vim.api.nvim_create_user_command("Pico8Stop", function()
   require("pico8.run").stop()
 end, { desc = "Stop the PICO-8 process started from nvim" })
 
+vim.api.nvim_create_user_command("Pico8Term", function()
+  require("pico8.run").toggle_terminal()
+end, { desc = "Show or hide the PICO-8 run terminal" })
+
+vim.api.nvim_create_user_command("Pico8TermClear", function()
+  require("pico8.run").clear_terminal()
+end, { desc = "Discard the PICO-8 terminal's output, leaving it running" })
+
 vim.api.nvim_create_user_command("Pico8New", function(cmd)
   local name = cmd.args
   if name == "" then

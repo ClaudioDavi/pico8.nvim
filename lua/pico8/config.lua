@@ -5,6 +5,7 @@ local M = {}
 ---@field run_args string[] Extra arguments passed before the cart path.
 ---@field carts_dir string Where `:Pico8New` scaffolds projects.
 ---@field include_file string Name of the Lua file the cart `#include`s.
+---@field terminal table Where `:Pico8Run` sends PICO-8's output.
 ---@field lsp table LSP integration options.
 ---@field folding table Folding of the cart's binary data sections.
 ---@field keymaps table<string, string|false> Keymaps, or false to disable one.
@@ -16,6 +17,19 @@ local defaults = {
   carts_dir = vim.fn.expand "~/pico8",
   include_file = "main.lua",
   cart_version = 42,
+
+  terminal = {
+    -- Run PICO-8 in a terminal buffer inside nvim, so printh() output and
+    -- PICO-8's own stdout are visible and the window can be jumped to.
+    -- Set false to run detached instead, outliving nvim but with no output.
+    enable = true,
+    -- Command used to open the window for that buffer.
+    split = "botright 15split",
+    -- Move the cursor into the terminal on launch.
+    focus = false,
+    -- Wipe the buffer when PICO-8 exits. Off, so the output stays readable.
+    close_on_exit = false,
+  },
 
   lsp = {
     -- Register the bundled PICO-8 API definitions with lua_ls. Set false if
@@ -40,6 +54,7 @@ local defaults = {
     -- Set any entry to false to skip it.
     run = "<leader>pr",
     stop = "<leader>ps",
+    terminal = "<leader>pt",
     new = false,
     toggle_folds = "<leader>pf",
   },
