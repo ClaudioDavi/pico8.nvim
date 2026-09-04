@@ -80,8 +80,13 @@ function M.extend_lua_ls(existing)
   -- deep_extend replaces list-like tables wholesale, so save the user's own
   -- symbols before merging and concatenate them back afterwards.
   local user_symbols = vim.deepcopy((a.runtime or {}).nonstandardSymbol or {})
+  -- One lua_ls client serves every Lua buffer, so its runtime version is not
+  -- ours to reassign: a config that already asked for LuaJIT is editing nvim
+  -- Lua, and the PICO-8 API comes from types/ either way.
+  local user_version = (a.runtime or {}).version
   a.runtime = vim.tbl_deep_extend("force", a.runtime or {}, b.runtime)
   a.runtime.nonstandardSymbol = user_symbols
+  a.runtime.version = user_version or a.runtime.version
   for _, sym in ipairs(b.runtime.nonstandardSymbol) do
     if not vim.tbl_contains(a.runtime.nonstandardSymbol, sym) then
       table.insert(a.runtime.nonstandardSymbol, sym)
@@ -131,10 +136,19 @@ function M.setup()
   local has_new_api = vim.lsp.config ~= nil and vim.fn.has "nvim-0.11" == 1
 
   if has_new_api then
-    -- Additive: `vim.lsp.config()` merges into whatever is already registered.
+    -- `vim.lsp.config()` merges with vim.tbl_deep_extend "force", which
+    -- *replaces* list-like values instead of appending to them. Handing it our
+    -- settings directly would therefore drop any library paths, globals or
+    -- disabled rules already registered by a distro or another plugin. Merge
+    -- against the existing config ourselves and register the result.
+    --
     -- Note the `settings` wrapper -- lua_ls options live under it, not at the
     -- top level of the config table.
-    vim.lsp.config("lua_ls", { settings = M.lua_ls_settings() })
+    local ok, existing = pcall(function()
+      return vim.lsp.config["lua_ls"]
+    end)
+    local merged = M.extend_lua_ls { settings = vim.deepcopy(ok and existing and existing.settings or {}) }
+    vim.lsp.config("lua_ls", { settings = merged.settings })
   else
     -- On older nvim, patch settings onto the client as it attaches. Less
     -- clean, but avoids requiring lspconfig or reordering the user's setup.

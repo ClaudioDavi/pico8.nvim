@@ -83,6 +83,30 @@ jobs:
                   assert(vim.tbl_contains(L.diagnostics.globals, "MY_GLOBAL"), "dropped user global")' \
             +qa
 
+      # extend_lua_ls being additive is not enough on its own: setup() has to
+      # actually route through it. Registering our settings straight into
+      # vim.lsp.config() looks additive but is not, because that merges with
+      # "force" and replaces lists.
+      - name: setup() preserves lua_ls settings registered before it
+        if: matrix.nvim != 'v0.10.4'
+        run: |
+          nvim --clean --headless \
+            '+lua vim.opt.runtimepath:prepend(vim.fn.getcwd())
+                  vim.lsp.config("lua_ls", { settings = { Lua = {
+                    runtime = { version = "LuaJIT" },
+                    workspace = { library = { "/distro/types" } } } } })
+                  require("pico8").setup {}
+                  local L = vim.lsp.config["lua_ls"].settings.Lua
+                  assert(vim.tbl_contains(L.workspace.library, "/distro/types"),
+                    "setup() dropped a pre-registered library path")
+                  assert(vim.tbl_contains(L.workspace.library, require("pico8.util").types_dir()),
+                    "setup() did not add our types dir")
+                  assert(L.runtime.version == "LuaJIT",
+                    "setup() overrode runtime.version, got " .. tostring(L.runtime.version))
+                  assert(vim.tbl_contains(L.runtime.nonstandardSymbol, "+="),
+                    "setup() did not add our operators")' \
+            +qa
+
       - name: scaffolding
         run: |
           nvim --clean -u test/minimal_init.lua --headless \
