@@ -68,7 +68,7 @@ This plugin contributes settings to `lua_ls`; it does not install or start it. I
 vim.lsp.enable "lua_ls"
 ```
 
-If your distribution already sets up `lua_ls` (LazyVim, NvChad, kickstart, …), nothing more is needed — the settings are merged additively into whatever is already registered.
+If your distribution already sets up `lua_ls` (LazyVim, NvChad, kickstart, …), nothing more is needed — the settings are merged additively into whatever is already registered, and re-applied as the client attaches, so it does not matter whether the distro configures `lua_ls` before or after this plugin loads. You should not need `dependencies` or any other load-order tweak; if you do, that is a bug worth reporting.
 
 ## Usage
 
@@ -190,7 +190,7 @@ Run `:checkhealth pico8` first — it reports missing binaries, the resolved def
 
 **Still seeing `Undefined global 'cls'`.** `lua_ls` reads its configuration at startup, so restart Neovim. If it persists, check `:Pico8Info` shows a `types dir` that exists, and confirm `lua_ls` is attached with `:LspInfo`.
 
-**A project-local `.luarc.json` wins over this plugin.** If one exists at your project root, `lua_ls` uses it *instead of* the settings sent by the client. Either delete it or add the `types/` path to its `workspace.library`.
+**A project-local `.luarc.json` wins over this plugin.** If one exists at your project root, `lua_ls` uses it *instead of* the settings sent by the client. Either delete it or add the `types/` path to its `workspace.library`. `:checkhealth pico8` checks the ones that would apply and tells you which, so start there — a stale path in that file is otherwise completely silent.
 
 **`:Pico8Run` says no cart found.** It looks for a `*.p8` beside the current file and upward. An unsaved, unnamed buffer has no path to search from.
 

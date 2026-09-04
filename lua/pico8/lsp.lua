@@ -122,11 +122,38 @@ function M.extend_lua_ls(existing)
   return out
 end
 
+--- Re-assert our settings on a lua_ls client that is already running.
+---
+--- Registration order is not something we can control. Anything that calls
+--- `vim.lsp.config("lua_ls", ...)` after us wins outright, because that merges
+--- with "force" and so replaces list values rather than appending to them --
+--- and distros do exactly that: NvChad, for one, registers its own library
+--- paths when nvim-lspconfig loads, which lands after a filetype-triggered
+--- plugin like this one. The user should not have to reorder their config to
+--- work around it, so reconcile as the client attaches: that is the one point
+--- guaranteed to run after every registration, whoever made it.
+---@param client vim.lsp.Client
+local function reconcile(client)
+  local merged = M.extend_lua_ls { settings = vim.deepcopy(client.settings or {}) }
+  if vim.deep_equal(merged.settings, client.settings) then
+    return
+  end
+
+  client.settings = merged.settings
+  -- 0.11 made the client methods take self; on 0.10 notify is a plain field.
+  if vim.fn.has "nvim-0.11" == 1 then
+    client:notify("workspace/didChangeConfiguration", { settings = client.settings })
+  else
+    client.notify("workspace/didChangeConfiguration", { settings = client.settings })
+  end
+end
+
 --- Wire up the language servers.
 ---
---- Uses the nvim 0.11+ `vim.lsp.config` API when available and falls back to
---- an LspAttach hook otherwise, so this works whether or not nvim-lspconfig is
---- installed and without assuming any particular distro's setup.
+--- Registers settings up front through `vim.lsp.config` when it exists, and
+--- reconciles them onto the live client on every version, so this works whether
+--- or not nvim-lspconfig is installed and whatever order a distro sets lua_ls
+--- up in.
 function M.setup()
   local opts = config.options
   if not opts.lsp.enable then
@@ -149,21 +176,24 @@ function M.setup()
     end)
     local merged = M.extend_lua_ls { settings = vim.deepcopy(ok and existing and existing.settings or {}) }
     vim.lsp.config("lua_ls", { settings = merged.settings })
-  else
-    -- On older nvim, patch settings onto the client as it attaches. Less
-    -- clean, but avoids requiring lspconfig or reordering the user's setup.
-    vim.api.nvim_create_autocmd("LspAttach", {
-      group = vim.api.nvim_create_augroup("pico8_lsp_legacy", { clear = true }),
-      callback = function(args)
-        local client = vim.lsp.get_client_by_id(args.data.client_id)
-        if not client or client.name ~= "lua_ls" then
-          return
-        end
-        local merged = M.extend_lua_ls { settings = client.settings or {} }
-        client.settings = merged.settings
-        client:notify("workspace/didChangeConfiguration", { settings = client.settings })
-      end,
-    })
+  end
+
+  -- Registering is not sufficient on its own -- see reconcile().
+  vim.api.nvim_create_autocmd("LspAttach", {
+    group = vim.api.nvim_create_augroup("pico8_lsp", { clear = true }),
+    callback = function(args)
+      local client = vim.lsp.get_client_by_id(args.data.client_id)
+      if client and client.name == "lua_ls" then
+        reconcile(client)
+      end
+    end,
+  })
+
+  -- LspAttach does not fire retroactively, and lua_ls may well be attached
+  -- already: this plugin loads on a filetype, so an earlier Lua buffer will
+  -- have started it before we were asked for.
+  for _, client in ipairs(vim.lsp.get_clients { name = "lua_ls" }) do
+    reconcile(client)
   end
 
   if opts.lsp.pico8_ls and has_new_api then

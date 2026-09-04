@@ -54,6 +54,53 @@ function M.check()
   else
     h.info("carts dir does not exist yet: " .. opts.carts_dir .. " (created on first :Pico8New)")
   end
+
+  M.check_luarc(h, types)
+end
+
+--- lua_ls prefers a `.luarc.json` at the workspace root over anything the
+--- client sends, so one sitting above the current file replaces our settings
+--- wholesale rather than adding to them. That is silent: the API just reads as
+--- undefined globals. Check the ones that would actually win.
+---@param h table vim.health
+---@param types string
+function M.check_luarc(h, types)
+  local roots = {}
+  for _, dir in ipairs { vim.fn.getcwd(), config.options.carts_dir } do
+    dir = vim.fn.expand(dir)
+    local found = vim.fs.find(".luarc.json", { path = dir, upward = true, type = "file" })[1]
+    if found and not vim.tbl_contains(roots, found) then
+      table.insert(roots, found)
+    end
+  end
+
+  for _, file in ipairs(roots) do
+    local ok, decoded = pcall(vim.json.decode, table.concat(vim.fn.readfile(file), "\n"))
+    if not ok or type(decoded) ~= "table" then
+      h.warn(".luarc.json is not valid JSON: " .. file, {
+        "lua_ls ignores it and falls back to our settings, but fix or delete it.",
+      })
+    else
+      local library = vim.tbl_get(decoded, "workspace", "library") or {}
+      local covered = false
+      for _, path in ipairs(library) do
+        if vim.fn.expand(path) == types then
+          covered = true
+        end
+      end
+
+      if covered then
+        h.ok(".luarc.json points at our definitions: " .. file)
+      else
+        h.warn(".luarc.json overrides our lua_ls settings: " .. file, {
+          "It wins over anything this plugin sends, so the PICO-8 API will read",
+          "as undefined globals. Add this to its workspace.library:",
+          "  " .. types,
+          "Or delete the file and let the plugin configure lua_ls.",
+        })
+      end
+    end
+  end
 end
 
 --- `:Pico8Info` -- a quick, non-health summary.
