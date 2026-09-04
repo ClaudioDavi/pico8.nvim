@@ -83,6 +83,79 @@ jobs:
                   assert(vim.tbl_contains(L.diagnostics.globals, "MY_GLOBAL"), "dropped user global")' \
             +qa
 
+      # extend_lua_ls being additive is not enough on its own: setup() has to
+      # actually route through it. Registering our settings straight into
+      # vim.lsp.config() looks additive but is not, because that merges with
+      # "force" and replaces lists.
+      - name: setup() preserves lua_ls settings registered before it
+        if: matrix.nvim != 'v0.10.4'
+        run: |
+          nvim --clean --headless \
+            '+lua vim.opt.runtimepath:prepend(vim.fn.getcwd())
+                  vim.lsp.config("lua_ls", { settings = { Lua = {
+                    runtime = { version = "LuaJIT" },
+                    workspace = { library = { "/distro/types" } } } } })
+                  require("pico8").setup {}
+                  local L = vim.lsp.config["lua_ls"].settings.Lua
+                  assert(vim.tbl_contains(L.workspace.library, "/distro/types"),
+                    "setup() dropped a pre-registered library path")
+                  assert(vim.tbl_contains(L.workspace.library, require("pico8.util").types_dir()),
+                    "setup() did not add our types dir")
+                  assert(L.runtime.version == "LuaJIT",
+                    "setup() overrode runtime.version, got " .. tostring(L.runtime.version))
+                  assert(vim.tbl_contains(L.runtime.nonstandardSymbol, "+="),
+                    "setup() did not add our operators")' \
+            +qa
+
+      # Registering settings is not enough: whoever calls vim.lsp.config() last
+      # wins, and a distro loading nvim-lspconfig after us is the common case.
+      # reconcile() on LspAttach has to put our settings back.
+      - name: settings survive a config registered after setup()
+        if: matrix.nvim != 'v0.10.4'
+        run: |
+          nvim --clean --headless \
+            '+lua vim.opt.runtimepath:prepend(vim.fn.getcwd())
+                  require("pico8").setup {}
+                  -- a distro clobbering us afterwards
+                  vim.lsp.config("lua_ls", { settings = { Lua = {
+                    runtime = { version = "LuaJIT" },
+                    workspace = { library = { "/distro/types" } } } } })
+                  local types = require("pico8.util").types_dir()
+                  local reg = vim.tbl_get(vim.lsp.config["lua_ls"], "settings", "Lua", "workspace", "library")
+                  assert(not vim.tbl_contains(reg, types), "precondition: expected the registration to be clobbered")
+
+                  local client = { name = "lua_ls", id = 1, notify = function() end,
+                    settings = vim.deepcopy(vim.lsp.config["lua_ls"].settings) }
+                  local orig = vim.lsp.get_client_by_id
+                  vim.lsp.get_client_by_id = function() return client end
+                  vim.api.nvim_exec_autocmds("LspAttach", { data = { client_id = 1 } })
+                  vim.lsp.get_client_by_id = orig
+
+                  local L = client.settings.Lua
+                  assert(vim.tbl_contains(L.workspace.library, types), "reconcile lost our types dir")
+                  assert(vim.tbl_contains(L.workspace.library, "/distro/types"), "reconcile dropped the distro path")
+                  assert(L.runtime.version == "LuaJIT", "reconcile overrode runtime.version")
+                  assert(vim.tbl_contains(L.runtime.nonstandardSymbol, "+="), "reconcile lost our operators")' \
+            +qa
+
+      - name: health warns about a .luarc.json that would override us
+        run: |
+          mkdir -p /tmp/luarc && echo '{"workspace":{"library":["/nope"]}}' > /tmp/luarc/.luarc.json
+          nvim --clean -u test/minimal_init.lua --headless '+cd /tmp/luarc' '+checkhealth pico8' \
+            '+lua local o = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+                  assert(o:match("overrides our lua_ls settings"), "no warning for a stale .luarc.json")' \
+            +qa
+          printf '{"workspace":{"library":["%s/types"]}}' "$(pwd)" > /tmp/luarc/.luarc.json
+          nvim --clean -u test/minimal_init.lua --headless '+cd /tmp/luarc' '+checkhealth pico8' \
+            '+lua local o = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+                  assert(o:match("points at our definitions"), "correct .luarc.json not recognised")' \
+            +qa
+          echo '{ not json' > /tmp/luarc/.luarc.json
+          nvim --clean -u test/minimal_init.lua --headless '+cd /tmp/luarc' '+checkhealth pico8' \
+            '+lua local o = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+                  assert(o:match("not valid JSON"), "malformed .luarc.json not reported")' \
+            +qa
+
       - name: scaffolding
         run: |
           nvim --clean -u test/minimal_init.lua --headless \
